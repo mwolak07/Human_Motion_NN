@@ -392,29 +392,103 @@ class H2HSessionData(Sequence):
         Modifies the private attributes:
             - self._mocap_data
             - self._wrist_data
-            - self._role_data
-            - self._handover_data
         """
         # Iterate over each trial.
         for trial in self._trials:
-            crop_starts = []
-            crop_ends = []
+            # Get the start and end crop for each marker.
+            start_crops = []
+            end_crops = []
             for marker in self._mocap_data[trial]:
-                crop_start, crop_end = self._get_nan_crop(self._mocap_data[trial][marker])
-                crop_starts.append(crop_start)
-                crop_ends.append(crop_end)
+                start_crop, end_crop = self._get_nan_crop(self._mocap_data[trial][marker])
+                start_crops.append(start_crop)
+                end_crops.append(end_crop)
+            # Choose the latest start and earliest end.
+            start_crop = max(start_crops)
+            end_crop = min(end_crops)
+            # If the crops eliminate all of the frames, throw out the trial.
+            if end_crop <= start_crop:
+                self._remove_trial(trial)
+            # Otherwise, crop the internal data.
+            else:
+                self._crop_mocap_frames(trial, start_crop, end_crop)
+                self._crop_wrist_frames(trial, start_crop, end_crop)
 
+    @staticmethod
+    def _get_nan_crop(mocap_frames: np.ndarray) -> Tuple[int, int]:
+        """Gets the start and end indexes to crop out all of the NaN values in the mocap_frames.
+
+        Args:
+            - mocap_frames: A shape (n_frames, 3) numpy array of mocap points in each frame for this trial and marker.
+
+        Returns:
+            A pair of indexes (start, end)
+        """
+        # Start crop is the first index where the values are not Nan.
+        start_crop = 0
+        for i, frame in enumerate(mocap_frames):
+            if not np.any(np.isnan(frame)):
+                start_crop = i
+                break
+        # End crop is the first index where the values are not Nan, in the reversed list of frames..
+        end_crop = mocap_frames.shape[0]
+        for i, frame in enumerate(np.flip(mocap_frames)):
+            if not np.any(np.isnan(frame)):
+                end_crop = i + 1  # +1 because end crop is not inclusive.
+                break
+        return start_crop, end_crop
+
+    def _crop_mocap_frames(self, trial: int, start_crop: int, end_crop: int) -> None:
+        """Crops the frames for every marker in self._mocap_data for the given trial.
+
+        Args:
+            trial: The trial to crop the frames for.
+            start_crop: The start index of the crop (inclusive).
+            end_crop: The end index of the crop (exclusive).
+
+        Modifies the private attributes:
+            - self._mocap_data
+        """
+        for marker in self._mocap_data[trial]:
+            self._mocap_data[trial][marker] = self._mocap_data[trial][marker][start_crop: end_crop]
+
+    def _crop_wrist_frames(self, trial: int, start_crop: int, end_crop: int) -> None:
+        """Crops the frames for every subject in self._wrist_data for the given trial.
+
+        Args:
+            trial: The trial to crop the frames for.
+            start_crop: The start index of the crop (inclusive).
+            end_crop: The end index of the crop (exclusive).
+
+        Modifies the private attributes:
+            - self._mocap_data
+        """
+        for subject in self._wrist_data[trial]:
+            self._mocap_data[trial][subject] = self._mocap_data[trial][subject][start_crop: end_crop]
 
     def crop_to_handover(self) -> None:
         """Crops all of the trials so that they end at object handover.
 
+        If handover is after the end of the trial, we leave the trial alone.
+
         Modifies the private attributes:
             - self._mocap_data
             - self._wrist_data
-            - self._role_data
-            - self._handover_data
         """
-        pass
+        # Iterate over each trial.
+        for trial in self._trials:
+            # Get the handover time from the internal list.
+            handover_time = self._handover_data[trial]
+            # Get the timestamp list from the wrist data.
+            timestamps = [frame[0] for frame in self._wrist_data[trial][1]]
+            # Handover is past the end, leave the trial alone.
+            if handover_time > timestamps[-1]:
+                continue
+            # Handover is within the timestamps, perform crop.
+            else:
+                # Get the index of the timestamp.
+                end_crop = timestamps.index(handover_time)
+                self._crop_mocap_frames(trial, 0, end_crop)
+                self._crop_wrist_frames(trial, 0, end_crop)
 
 
 def test():
