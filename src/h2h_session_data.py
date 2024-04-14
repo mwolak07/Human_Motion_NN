@@ -1,14 +1,14 @@
 from typing import ClassVar, List, Dict, Tuple, Optional, Iterator, Set, Any
 from collections.abc import Sequence
 from skspatial.objects import Point
+from scipy import signal
 import numpy as np
 import mat73
 
 
-# TODO: More intelligent dropping of NaN values.
-# TODO: Integrate a more flexible reader that can read only specific trials.
-# TODO: Load in ALL data from the matlab file into this object. Including GAZE.
-# TODO: Replace lists with numpy fixed memory allocation.
+# TODO: Load in ALL data from the matlab file into this object. Including GAZE (feature).
+# TODO: Integrate a more flexible reader that can read only specific trials (performance).
+# TODO: Replace lists with numpy fixed memory allocation (performance).
 
 
 class H2HSessionData(Sequence):
@@ -41,7 +41,7 @@ class H2HSessionData(Sequence):
         target_markers: The list of markers to include (same for each subject). (If None, include all).
         _trials: A list of trials in this session (1, 2, 3, etc.).
         _mocap_data: A dictionary of the mocap data for the current session.
-            Structured: {trial: {subject: {marker: [(timestamp, point)]}}}.
+            Structured: {trial: {marker: [(timestamp, point)]}}.
         _wrist_data: A dictionary of the wrist marker data for the current session.
             Structured: {trial: {subject: [(timestamp, point)]}}.
         _role_data: A dictionary of the role data for the current session.
@@ -53,8 +53,10 @@ class H2HSessionData(Sequence):
     wrist_marker_name: ClassVar[str] = 'RUSP'
     sub_1_tag: ClassVar[str] = 'Sub1'
     sub_2_tag: ClassVar[str] = 'Sub2'
+    session_file: str
+    target_markers: Set[str]
     _trials: List[int]
-    _mocap_data: Dict[int, Dict[int, Dict[str, List[Tuple[float, Point]]]]]
+    _mocap_data: Dict[int, Dict[str, List[Tuple[float, Point]]]]
     _wrist_data: Dict[int, Dict[int, List[Tuple[float, Point]]]]
     _role_data: Dict[int, str]
     _handover_data: Dict[int, float]
@@ -65,12 +67,12 @@ class H2HSessionData(Sequence):
 
         Args:
             session_file: The path to the Matlab 7.3 file containing the session's data.
-            target_markers: The list of markers to include (same for each subject). (If None, include all). The names
-                            should have the subject tags stripped. For example, 'Sub1_FH' becomes 'FH'.
+            target_markers: The list of markers to include. (If None, include all). The names should have the subject
+                            tags included, like: 'Sub1_FH'.
         """
         # Initialize public attributes.
         self.session_file = session_file
-        self.target_markers = target_markers
+        self.target_markers = set(target_markers) if target_markers is not None else None
         # Initialize private attributes.
         self._trials = None
         self._mocap_data = None
@@ -178,19 +180,15 @@ class H2HSessionData(Sequence):
                 # Make sure to offset i by 1.
                 self._trials.append(i + 1)
 
-    def _parse_mocap(self, session_data: Dict[str, Any]) -> Dict[int, Dict[int, Dict[str, List[Tuple[float, Point]]]]]:
+    def _parse_mocap(self, session_data: Dict[str, Any]) -> Dict[int, Dict[str, List[Tuple[float, Point]]]]:
         """Parses the mocap data from the data dict loaded from the session file. We store the object as subject -1.
 
         Args:
             session_data: The data dict loaded from the session file.
 
         Returns:
-            The mocap data, represented as: {trial: {subject: {marker: [(timestamp, Point)]}}}.
+            The mocap data, represented as: {trial: {marker: [(timestamp, Point)]}}.
         """
-        # Get a list of markers for each subject, if there are any.
-        if self.target_markers is not None:
-            sub_1_markers = [self.sub_1_tag + marker for marker in self.target_markers]
-            sub_2_markers = [self.sub_2_tag + marker for marker in self.target_markers]
         # Get the list of mocap data for each trial.
         mocap_list = session_data['cropped_data']['cropped_mocap']
         # Parse the mocap data for each trial.
@@ -201,54 +199,28 @@ class H2HSessionData(Sequence):
             # Get the corresponding lists of marker names and marker points.
             label_list = mocap_list[i]['Labels']
             point_list = mocap_list[i]['Loc']
-            # Parse all of the markers.
-            if self.target_markers is None:
-                self.target_markers = self._parse_all_markers(label_list)
+            # Get the list of target labels. If self._target_markers is None, we take all of the labels.
+            target_labels = self.target_markers if self.target_markers is not None else label_list
             # Get the mocap data for each target marker for each subject.
             self._mocap_data[trial] = {}
             for j in range(len(label_list)):
                 label = label_list[j]
-                # Parse the markers for subject 1.
-                if self.sub_1_tag in label:
-                     =
-                elif self.sub_2_tag in label:
+                if label in target_labels:
+                    self._mocap_data[label] = self._parse_mocap_frames(point_list[j])
 
-                else:
-
-            # Process the target markers.
-            # Get the index of each target marker in the marker list based on the label list.
-            sub_1_i = label_list.index(sub_1_wrist_marker)
-            sub_2_i = label_list.index(sub_2_wrist_marker)
-            # Parse the mocap data for the wrist marker for each subject.
-            point_list = mocap_list[i]['Loc']
-            self._wrist_data[trial] = {
-                1: self._parse_mocap_frames(point_list[sub_1_i], False),
-                2: self._parse_mocap_frames(point_list[sub_2_i], False)
-            }
-
-    def _get_target_labels(self, label_list: List[str]) -> Set[str]:
-        """Parses the names of all of the markers from """
-
-    def _parse_mocap_frames(self, mocap_frames: np.ndarray, drop_nan: bool) -> List[Tuple[float, Point]]:
+    def _parse_mocap_frames(self, mocap_frames: np.ndarray) -> List[Tuple[float, Point]]:
         """Parses the numpy array of mocap frames for one marker.
 
         Args:
             - mocap_frames: A shape (n_frames, 3) numpy array of mocap points in each frame for this trial and marker.
-            - drop_nan: If True, we drop any frames with NaN values in them.
 
         Returns:
             A list of pairs of (timestamp, Point).
         """
         point_list = []
-        n_frames = 0
         for mocap_frame in mocap_frames:
-            # If drop_nan is enabled, skip any frames with NaN values.
-            if drop_nan and np.any(np.isnan(mocap_frame)):
-                continue
-            else:
-                point_list.append(Point(mocap_frame))
-                n_frames += 1
-        timestamp_list = self._get_timestamps(n_frames, self.mocap_fps)
+            point_list.append(Point(mocap_frame))
+        timestamp_list = self._get_timestamps(mocap_frames.shape[0], self.mocap_fps)
         return zip(timestamp_list, point_list)
 
     def _parse_wrist(self, session_data: Dict[str, Any]) -> Dict[int, Dict[int, List[Tuple[float, Point]]]]:
@@ -277,8 +249,8 @@ class H2HSessionData(Sequence):
             # Parse the mocap data for the wrist marker for each subject.
             point_list = mocap_list[i]['Loc']
             self._wrist_data[trial] = {
-                1: self._parse_mocap_frames(point_list[sub_1_i], False),
-                2: self._parse_mocap_frames(point_list[sub_2_i], False)
+                1: self._parse_mocap_frames(point_list[sub_1_i]),
+                2: self._parse_mocap_frames(point_list[sub_2_i])
             }
 
     def _parse_role(self, session_data: Dict[str, Any]) -> Dict[int, str]:
@@ -318,7 +290,6 @@ class H2HSessionData(Sequence):
         max_time = n_frames * frame_time
         return np.arange(0, max_time, frame_time, dtype=float).tolist()
 
-
     def _get_handover(self) -> Dict[int, float]:
         """Gets the handover data from the already loaded wrist and role data. Does this by looking at the butterworth
         filtered velocity curve for the wrist marker of the follower.
@@ -326,7 +297,113 @@ class H2HSessionData(Sequence):
         Returns:
             The handover data, represented as: {trial: timestamp}.
         """
-        pass
+        # Defining thresholds for picking peaks and minimums.
+        peak_threshold = 0.2
+        min_threshold = 0.1
+        output = {}
+        for trial in self._trials:
+            try:
+                follower = 2 if self._role_data[trial] in ['Sub1_IG', 'Sub1_IR'] else 1
+                follower_velocity = self._get_follower_velocity(trial, follower)
+                # Finding the local maxima using the peak_threshold.
+                peaks_i, _ = signal.find_peaks([elem[1] for elem in follower_velocity])
+                maxs_i = [i for i in peaks_i if follower_velocity[i][1] > peak_threshold]
+                # Finding the local minima by inverting the graph and using min_threshold.
+                follower_velocity_inv = [-1 * elem[1] for elem in follower_velocity]
+                peaks_i, _ = signal.find_peaks(follower_velocity_inv)
+                # Getting the candidate mins, that appear between the maxes we found.
+                candidate_mins_i = [i for i in peaks_i if maxs_i[0] < i < maxs_i[-1]]
+                # Filtering out the mins that do not have values below our min threshold.
+                mins_i = [i for i in candidate_mins_i if follower_velocity[i][1] < min_threshold]
+                # If the list is not empty after filtering with the min threshold, we use the end of the list.
+                if len(mins_i) != 0:
+                    contact_pt = mins_i[-1]
+                # If the list is empty, we revert to the candidate mins list and use the end of that list.
+                else:
+                    contact_pt = candidate_mins_i[-1]
+                # Our final output is the timestamp at our contact point.
+                output[trial] = follower_velocity[contact_pt][0]
+            # When there's an issue finding handover, we remove the trial.
+            except Exception:
+                self._remove_trial(trial)
+        return output
+
+    def _get_follower_velocity(self, trial: int, follower: int) -> List[Tuple[float, float]]:
+        """
+        Gets a list of the instantaneous velocity at each point for the given follower subject.
+        This does not include the velocity for the first point, since there is no prior point. Velocity is defined as
+        the distance between the consecutive coordinates over the frame time.
+
+        Also applies a low-pass butterworth filter with order 4 and cutoff frequency 10 / (fps / 2).
+
+        Args:
+            trial: The trial to get the follower velocity for.
+            follower: 1 if subject 1 is the follower, 2 if subject 2 is the follower.
+
+        Returns:
+            A list of (timestamp, instantaneous velocity), not including the first point.
+        """
+        # Getting the points with the appropriate trial and marker.
+        points = self._wrist_data[trial][follower]
+        # Filtering out points where we have nan values, as this messes with the butterworth filter.
+        points = [point for point in points if not np.any(np.isnan(point))]
+        # Getting the velocities from the points.
+        velocities = []
+        for i in range(1, len(points)):
+            d = (points[i][1] - points[i - 1][1]).norm()
+            dt = points[i][0] - points[i - 1][0]
+            v = d / dt if dt != 0 else 0
+            velocities.append(v)
+        # Setting up butterworth filter params.
+        filt_order = 4
+        cutoff_freq = 10
+        filt_cutoff = cutoff_freq / (self.mocap_fps / 2)  # TODO: When we add gaze, this needs to go to global fps.
+        filt_type = 'low'
+        # Applying the butterworth filter.
+        result = signal.butter(N=filt_order, Wn=filt_cutoff, btype=filt_type, output='ba')
+        velocities = signal.filtfilt(result[0], result[1], velocities)
+        # Adding the timestamps back in.
+        output = [(points[i + 1][0], velocities[i]) for i in range(len(velocities))]
+        return output
+
+    def _remove_trial(self, trial: int) -> None:
+        """Removes the given trial from our internal data.
+
+        Args:
+            trial: The trial number to be removed.
+
+        Modifies the private attributes:
+            - self._trials
+            - self._mocap_data
+            - self._wrist_data
+            - self._role_data
+            - self._handover_data
+        """
+        self._trials.remove(trial)
+        self._mocap_data.pop(trial)
+        self._wrist_data.pop(trial)
+        self._role_data.pop(trial)
+        self._handover_data.pop(trial)
+
+    def crop_nan(self) -> None:
+        """Crops all of the nan values out of each trial. This is done by taking the smallest crop window over all
+        of the markers in self._mocap_data and applying it to the rest of the per-frame data.
+
+        Modifies the private attributes:
+            - self._mocap_data
+            - self._wrist_data
+            - self._role_data
+            - self._handover_data
+        """
+        # Iterate over each trial.
+        for trial in self._trials:
+            crop_starts = []
+            crop_ends = []
+            for marker in self._mocap_data[trial]:
+                crop_start, crop_end = self._get_nan_crop(self._mocap_data[trial][marker])
+                crop_starts.append(crop_start)
+                crop_ends.append(crop_end)
+
 
     def crop_to_handover(self) -> None:
         """Crops all of the trials so that they end at object handover.
