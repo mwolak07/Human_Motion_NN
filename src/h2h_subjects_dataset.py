@@ -1,5 +1,5 @@
+from typing import List, Tuple, Optional
 from torch.utils.data import Dataset
-from typing import List, Tuple
 from torch import Tensor
 
 from h2h_session_data import H2HSessionData
@@ -19,31 +19,60 @@ class H2HSubjectsDataset(Dataset):
 
     Attributes:
         session_files: The list of session file paths to build the dataset from.
-        max_sequence_len: The maximum length of a sequence of frames.
+        sequence_length: The maximum length of a sequence of frames.
+        target_markers: The list of markers we want to include in the dataset. None means all will be included.
         _samples: The tensor of input samples, shape (N, L, J, 3).
         _labels: The tensor of labels for each sample, shape (N, 1).
     """
     session_files: List[str]
     sequence_length: int
+    target_markers: List[str]
     _samples: Tensor
     _labels: Tensor
 
-    def __init__(self, session_files: List[str], sequence_length: int):
-        """
-        Creates a new Dataset object using the session files. Loads everything into memory, which may not be optimal
+    def __init__(self, session_files: List[str], sequence_length: int, target_markers: Optional[List[str]] = None):
+        """Creates a new Dataset object using the session files. Loads everything into memory, which may not be optimal
         for very large data sets.
 
         Args:
             session_files: The list of Matlab 7.3 files to load data from.
             sequence_length: The maximum length of our sequences of frames.
+            target_markers: The list of markers we want to include in the dataset. None means all will be included.
         """
         self.session_files = session_files
         self.sequence_length = sequence_length
+        self.target_markers = target_markers
         # Get a list of input sequences for each trial, "flattening" all of the sessions.
         sequences, labels = self._load_sequences()
         # Split the trail-length sequences with a sliding window according to our max sequence length,
         # and re-assign the labels to match the new shape.
         self._split_sequences(sequences, labels)
+
+    def _load_sequences(self) -> Tuple[Tensor, Tensor]:
+        """Takes the trials from each Session and loads the marker data in as separate sequences, and splits each
+        subject's markers into its own sequence. Formats each sequence as a tensor of shape (L, J, 3). The labels are
+        which subject each sequence belongs to, with subject 1 having a label of 0 and subject 2 a label of 1.
+
+        Returns:
+            Sequences, a tensor of shape (N, L, J, 3), with two sequences per trail for all of the sessions.
+            Labels, a tensor of shape (N, 1), with a label for each sequence.
+        """
+        pass
+
+    def _split_sequences(self, sequences: Tensor, labels: Tensor):
+        """Splits the sequences corresponding to entire trials into ones of length self.sequence_length, and using a
+        sliding window method to generate multiple sequences for each trial. Inflates the labels to correspond to
+        these changes.
+
+        Args:
+            sequences: A tensor of shape (N, L, J, 3), with two sequences per trail for all of the sessions.
+            labels: A tensor of shape (N, 1), with a label for each sequence.
+
+        Modifies the private attributes:
+            - self._samples
+            - self._labels
+        """
+        pass
 
     def __len__(self) -> int:
         """Gets the length of this Dataset. This is the total number of sequences (N).
