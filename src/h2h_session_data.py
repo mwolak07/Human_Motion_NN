@@ -1,4 +1,4 @@
-from typing import ClassVar, List, Dict, Tuple, Optional, Iterator, Set, Any
+from typing import ClassVar, List, Dict, Tuple, Optional, Set, Any
 from collections.abc import Sequence
 from skspatial.objects import Point
 from scipy import signal
@@ -108,7 +108,7 @@ class H2HSessionData(Sequence):
         mocap_data = self._getitem_data_copy(self._mocap_data, k)
         role_data = self._getitem_data_copy(self._role_data, k)
         handover_data = self._getitem_data_copy(self._handover_data, k)
-        # Return a dict with all of the data.
+        # Return a dict with all the data.
         return {
             'mocap': mocap_data,
             'role': role_data,
@@ -128,14 +128,6 @@ class H2HSessionData(Sequence):
             The data for the given trial for the given attribute, or None.
         """
         return data[k].copy() if data is not None else None
-
-    def __iter__(self) -> Iterator[int]:
-        """Gets an iterator over the __getitem__ keys, which are the trial numbers, in order.
-
-        Returns:
-            An iterator over the trial numbers.
-        """
-        return iter(self._trials)
 
     def load(self) -> None:
         """Loads the data from the session file to this object. Parses the data into the output format we want.
@@ -181,7 +173,7 @@ class H2HSessionData(Sequence):
                 self._trials.append(i + 1)
 
     def _parse_mocap(self, session_data: Dict[str, Any]) -> Dict[int, Dict[str, List[Tuple[float, Point]]]]:
-        """Parses the mocap data from the data dict loaded from the session file. We store the object as subject -1.
+        """Parses the mocap data from the data dict loaded from the session file.
 
         Args:
             session_data: The data dict loaded from the session file.
@@ -199,7 +191,7 @@ class H2HSessionData(Sequence):
             # Get the corresponding lists of marker names and marker points.
             label_list = mocap_list[i]['Labels']
             point_list = mocap_list[i]['Loc']
-            # Get the list of target labels. If self._target_markers is None, we take all of the labels.
+            # Get the list of target labels. If self._target_markers is None, we take all the labels.
             target_labels = self.target_markers if self.target_markers is not None else label_list
             # Get the mocap data for each target marker for each subject.
             self._mocap_data[trial] = {}
@@ -324,7 +316,8 @@ class H2HSessionData(Sequence):
                 # Our final output is the timestamp at our contact point.
                 output[trial] = follower_velocity[contact_pt][0]
             # When there's an issue finding handover, we remove the trial.
-            except Exception:
+            except Exception as e:
+                print(f'Problem finding handover in trial {trial}: {e}')
                 self._remove_trial(trial)
         return output
 
@@ -350,7 +343,7 @@ class H2HSessionData(Sequence):
         # Getting the velocities from the points.
         velocities = []
         for i in range(1, len(points)):
-            d = (points[i][1] - points[i - 1][1]).norm()
+            d = np.linalg.norm(points[i][1] - points[i - 1][1])
             dt = points[i][0] - points[i - 1][0]
             v = d / dt if dt != 0 else 0
             velocities.append(v)
@@ -386,8 +379,8 @@ class H2HSessionData(Sequence):
         self._handover_data.pop(trial)
 
     def crop_nan(self) -> None:
-        """Crops all of the nan values out of each trial. This is done by taking the smallest crop window over all
-        of the markers in self._mocap_data and applying it to the rest of the per-frame data.
+        """Crops all the nan values out of each trial. This is done by taking the smallest crop window over all
+        the markers in self._mocap_data and applying it to the rest of the per-frame data.
 
         Modifies the private attributes:
             - self._mocap_data
@@ -405,7 +398,7 @@ class H2HSessionData(Sequence):
             # Choose the latest start and earliest end.
             start_crop = max(start_crops)
             end_crop = min(end_crops)
-            # If the crops eliminate all of the frames, throw out the trial.
+            # If the crops eliminate all the frames, throw out the trial.
             if end_crop <= start_crop:
                 self._remove_trial(trial)
             # Otherwise, crop the internal data.
@@ -415,7 +408,7 @@ class H2HSessionData(Sequence):
 
     @staticmethod
     def _get_nan_crop(mocap_frames: np.ndarray) -> Tuple[int, int]:
-        """Gets the start and end indexes to crop out all of the NaN values in the mocap_frames.
+        """Gets the start and end indexes to crop out all the NaN values in the mocap_frames.
 
         Args:
             - mocap_frames: A shape (n_frames, 3) numpy array of mocap points in each frame for this trial and marker.
@@ -429,7 +422,7 @@ class H2HSessionData(Sequence):
             if not np.any(np.isnan(frame)):
                 start_crop = i
                 break
-        # End crop is the first index where the values are not Nan, in the reversed list of frames..
+        # End crop is the first index where the values are not Nan, in the reversed list of frames.
         end_crop = mocap_frames.shape[0]
         for i, frame in enumerate(np.flip(mocap_frames)):
             if not np.any(np.isnan(frame)):
@@ -466,7 +459,7 @@ class H2HSessionData(Sequence):
             self._mocap_data[trial][subject] = self._mocap_data[trial][subject][start_crop: end_crop]
 
     def crop_to_handover(self) -> None:
-        """Crops all of the trials so that they end at object handover.
+        """Crops all the trials so that they end at object handover.
 
         If handover is after the end of the trial, we leave the trial alone.
 
