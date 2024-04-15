@@ -2,6 +2,7 @@ from typing import List, Tuple, Optional
 from torch.utils.data import Dataset
 from torch import Tensor
 
+from utils import joint_groups_to_target_markers
 from h2h_session_data import H2HSessionData
 
 
@@ -20,29 +21,39 @@ class H2HSubjectsDataset(Dataset):
     Attributes:
         session_files: The list of session file paths to build the dataset from.
         sequence_length: The maximum length of a sequence of frames.
-        target_markers: The list of markers we want to include in the dataset. None means all will be included.
+        sub_1_markers: The list of marker labels to include for subject 1.
+        sub_2_markers: The list of marker labels to include for subject 2.
+        object_markers: The list of marker labels to include for the object.
         _samples: The tensor of input samples, shape (N, L, J, 3).
         _labels: The tensor of labels for each sample, shape (N, 1).
     """
     session_files: List[str]
     sequence_length: int
-    target_markers: List[str]
+    sub_1_markers: List[str]
+    sub_2_markers: List[str]
+    object_markers: List[str]
     _samples: Tensor
     _labels: Tensor
 
-    def __init__(self, session_files: List[str], sequence_length: int, target_markers: Optional[List[str]] = None):
+    def __init__(self, session_files: List[str], sequence_length: int, joint_groups_file: str,
+                 joint_groups: Optional[List[str]] = None):
         """Creates a new Dataset object using the session files. Loads everything into memory, which may not be optimal
         for very large data sets.
 
         Args:
             session_files: The list of Matlab 7.3 files to load data from.
             sequence_length: The maximum length of our sequences of frames.
-            target_markers: The list of markers we want to include in the dataset. None means all will be included.
+            joint_groups_file: Path to the file specifying which markers are in which joint groups.
+            joint_groups: List of which joint groups we want to include in the target markers.
         """
         self.session_files = session_files
         self.sequence_length = sequence_length
-        self.target_markers = target_markers
-        # Get a list of input sequences for each trial, "flattening" all of the sessions.
+        target_markers = joint_groups_to_target_markers(joint_groups_file, joint_groups,
+                                                        H2HSessionData.sub_1_tag, H2HSessionData.sub_2_tag),
+        self.sub_1_markers = target_markers[0]
+        self.sub_2_markers = target_markers[1]
+        self.object_markers = target_markers[2]
+        # Get a list of input sequences for each trial, "flattening" all the sessions.
         sequences, labels = self._load_sequences()
         # Split the trail-length sequences with a sliding window according to our max sequence length,
         # and re-assign the labels to match the new shape.
