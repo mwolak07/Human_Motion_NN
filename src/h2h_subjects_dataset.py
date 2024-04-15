@@ -13,7 +13,8 @@ from h2h_session_data import H2HSessionData
 
 
 class H2HSubjectsDataset(Dataset):
-    """Represents a dataset of H2H mocap sequences split between subject 1 and subject 2 and labeled with which subject
+    """
+    Represents a dataset of H2H mocap sequences split between subject 1 and subject 2 and labeled with which subject
     they belong to.
 
     We split the markers for subject 1 and subject 2 into separate sequences, and label them with 0 for subject 1
@@ -45,7 +46,8 @@ class H2HSubjectsDataset(Dataset):
 
     def __init__(self, session_files: List[str], sequence_length: int, joint_groups_file: str,
                  joint_groups: Optional[List[str]] = None):
-        """Creates a new Dataset object using the session files. Loads everything into memory, which may not be optimal
+        """
+        Creates a new Dataset object using the session files. Loads everything into memory, which may not be optimal
         for very large data sets.
 
         Args:
@@ -76,7 +78,8 @@ class H2HSubjectsDataset(Dataset):
         self._split_sequences(sequences, labels)
 
     def _load_sequences(self) -> Tuple[Tensor, Tensor]:
-        """Takes the trials from each Session and loads the marker data in as separate sequences, and splits each
+        """
+        Takes the trials from each Session and loads the marker data in as separate sequences, and splits each
         subject's markers into its own sequence. Formats each sequence as a tensor of shape (L, M, 3). The labels are
         which subject each sequence belongs to, with subject 1 having a label of 0 and subject 2 a label of 1.
 
@@ -90,7 +93,7 @@ class H2HSubjectsDataset(Dataset):
         # Iterate through all the session files.
         for session_file in self.session_files:
             # Iterating though each trial in the session.
-            session_data = H2HSessionData(session_file)
+            session_data = self._load_session_data(session_file)
             for trial in range(len(session_data)):
                 mocap_data = session_data[trial]['mocap']
                 # Append subject 1's mocap data.
@@ -103,8 +106,27 @@ class H2HSubjectsDataset(Dataset):
         return torch.tensor(sequences, dtype=torch.float64), torch.tensor(labels, dtype=torch.float64)
 
     @staticmethod
+    def _load_session_data(session_file: str) -> H2HSessionData:
+        """
+        Loads the session data from the session file into an H2HSessionData object. Also crops each trial to exclude
+        nan markers, and cops the end of each trial to the time of handover.
+
+        Args:
+            session_file: Path to the session data file.
+
+        Returns:
+            H2HSessionData object.
+        """
+        session_data = H2HSessionData(session_file)
+        session_data.load()
+        session_data.crop_nan()
+        session_data.crop_to_handover()
+        return session_data
+
+    @staticmethod
     def _parse_markers(mocap_data: Dict[str, List[Tuple[float, Point]]], target_markers: List[str]) -> Tensor:
-        """Parses the marker data corresponding to the given target markers (in order) from the given trial data.
+        """
+        Parses the marker data corresponding to the given target markers (in order) from the given trial data.
         Reshapes it into a tensor of shape (L, M, 3), by putting frames first, and markers second.
         The markers are ordered according to the sorted joints, then the sorted order of the marker names.
 
@@ -128,7 +150,8 @@ class H2HSubjectsDataset(Dataset):
         return output
 
     def _split_sequences(self, sequences: Tensor, sequence_labels: Tensor):
-        """Splits the sequences corresponding to entire trials into ones of length self.sequence_length, and using a
+        """
+        Splits the sequences corresponding to entire trials into ones of length self.sequence_length, and using a
         sliding window method to generate multiple sequences for each trial. Inflates the labels to correspond to
         these changes.
 
@@ -155,7 +178,8 @@ class H2HSubjectsDataset(Dataset):
         return torch.tensor(samples, dtype=torch.float64), torch.tensor(labels, dtype=torch.float64)
 
     def __len__(self) -> int:
-        """Gets the length of this Dataset. This is the total number of sequences (N).
+        """
+        Gets the length of this Dataset. This is the total number of sequences (N).
 
         Returns:
             The number of sequences in the dataset.
@@ -163,7 +187,8 @@ class H2HSubjectsDataset(Dataset):
         return self._samples.shape[0]
 
     def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
-        """Returns the sample and label at index idx out of N.
+        """
+        Returns the sample and label at index idx out of N.
 
         Args:
             idx: The index of the sample we want to retrieve

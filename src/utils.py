@@ -4,7 +4,8 @@ import json
 
 def joint_groups_to_marker_labels(joint_groups_file: str, joint_groups: List[str], prefix: Optional[str] = None) \
         -> List[str]:
-    """Reads the joint groups from the file, and outputs the list of marker labels making up those joint groups.
+    """
+    Reads the joint groups from the file, and outputs the list of marker labels making up those joint groups.
     This "flattens" the markers across the joint groups.
 
     For consistency, we sort the list of joint groups.
@@ -39,7 +40,8 @@ def joint_groups_to_marker_labels(joint_groups_file: str, joint_groups: List[str
 
 
 def load_joint_group_names(joint_groups_file: str) -> List[str]:
-    """Loads the joint group names from the json file, which is just the keys of the loaded map.
+    """
+    Loads the joint group names from the json file, which is just the keys of the loaded map.
 
     Args:
         joint_groups_file: Path to the file specifying which marker labels are in which joints.

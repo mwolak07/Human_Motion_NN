@@ -12,7 +12,8 @@ import mat73
 
 
 class H2HSessionData(Sequence):
-    """Represents a fast and convenient Python interface for the H2H session data, stored in Matlab 7.3 files.
+    """
+    Represents a fast and convenient Python interface for the H2H session data, stored in Matlab 7.3 files.
     Each H2HSessionData object corresponds to one session, and contains the data gathered for each trial, except
     for images and video. (Currently, we only include mocap).
     Handover time is also provided, computed from the velocity profile of the follower wrist marker.
@@ -62,7 +63,8 @@ class H2HSessionData(Sequence):
     _handover_data: Dict[int, float]
 
     def __init__(self, session_file: str, target_markers: Optional[List[str]] = None):
-        """Initializes the object with the given session file and target markers.
+        """
+        Initializes the object with the given session file and target markers.
         Does not read any data until .load() is called.
 
         Args:
@@ -81,7 +83,8 @@ class H2HSessionData(Sequence):
         self._handover_data = None
 
     def __len__(self) -> int:
-        """Gets the number of trials in this session.
+        """
+        Gets the number of trials in this session.
 
         Returns:
             The number of trials in this session.
@@ -89,7 +92,8 @@ class H2HSessionData(Sequence):
         return len(self._trials)
 
     def __getitem__(self, k: int) -> Dict[str, Any]:
-        """Gets the data for trial k. Note the original files index starts with trial one, and this function follows
+        """
+        Gets the data for trial k. Note the original files index starts with trial one, and this function follows
         the same paradigm, so there is no trial 0.
 
         Args:
@@ -117,7 +121,8 @@ class H2HSessionData(Sequence):
 
     @staticmethod
     def _getitem_data_copy(data: Optional[Any], k: int) -> Optional[Any]:
-        """Gets the copy of the item at trail k for the given private attribute.
+        """
+        Gets the copy of the item at trail k for the given private attribute.
         Returns None for the item if the attribute is None.
 
         Args:
@@ -130,7 +135,8 @@ class H2HSessionData(Sequence):
         return data[k].copy() if data is not None else None
 
     def load(self) -> None:
-        """Loads the data from the session file to this object. Parses the data into the output format we want.
+        """
+        Loads the data from the session file to this object. Parses the data into the output format we want.
 
         Modifies the private attributes:
             - self._mocap_data
@@ -151,8 +157,10 @@ class H2HSessionData(Sequence):
         # Calculate the handover time using the wrist and role data.
         self._handover_data = self._get_handover()
 
-    def _parse_trials(self, session_data: Dict[str, Any]) -> List[int]:
-        """Parses the number of each trial from the data dict loaded from the session file.
+    @staticmethod
+    def _parse_trials(session_data: Dict[str, Any]) -> List[int]:
+        """
+        Parses the number of each trial from the data dict loaded from the session file.
 
         We derive this from the role data. It is important to take into account missing trials - some have an empty
         role, and these should be skipped.
@@ -166,14 +174,16 @@ class H2HSessionData(Sequence):
         # Get the role list.
         role_list = session_data['cropped_data']['role']
         # For each trial with a valid role, add it to the internal list of trials in this session.
-        self._trials = []
+        trials = []
         for i, role in enumerate(role_list):
             if role is not None:
                 # Make sure to offset i by 1.
-                self._trials.append(i + 1)
+                trials.append(i + 1)
+        return trials
 
     def _parse_mocap(self, session_data: Dict[str, Any]) -> Dict[int, Dict[str, List[Tuple[float, Point]]]]:
-        """Parses the mocap data from the data dict loaded from the session file.
+        """
+        Parses the mocap data from the data dict loaded from the session file.
 
         Args:
             session_data: The data dict loaded from the session file.
@@ -184,7 +194,7 @@ class H2HSessionData(Sequence):
         # Get the list of mocap data for each trial.
         mocap_list = session_data['cropped_data']['cropped_mocap']
         # Parse the mocap data for each trial.
-        self._mocap_data = {}
+        mocap_data = {}
         for trial in self._trials:
             # self._trials uses trial number, trial index is trial - 1.
             i = trial - 1
@@ -194,14 +204,16 @@ class H2HSessionData(Sequence):
             # Get the list of target labels. If self._target_markers is None, we take all the labels.
             target_labels = self.target_markers if self.target_markers is not None else label_list
             # Get the mocap data for each target marker for each subject.
-            self._mocap_data[trial] = {}
+            mocap_data[trial] = {}
             for j in range(len(label_list)):
                 label = label_list[j]
                 if label in target_labels:
-                    self._mocap_data[label] = self._parse_mocap_frames(point_list[j])
+                    mocap_data[label] = self._parse_mocap_frames(point_list[j])
+        return mocap_data
 
     def _parse_mocap_frames(self, mocap_frames: np.ndarray) -> List[Tuple[float, Point]]:
-        """Parses the numpy array of mocap frames for one marker.
+        """
+        Parses the numpy array of mocap frames for one marker.
 
         Args:
             - mocap_frames: A shape (n_frames, 3) numpy array of mocap points in each frame for this trial and marker.
@@ -216,7 +228,8 @@ class H2HSessionData(Sequence):
         return zip(timestamp_list, point_list)
 
     def _parse_wrist(self, session_data: Dict[str, Any]) -> Dict[int, Dict[int, List[Tuple[float, Point]]]]:
-        """Parses the wrist data from the data dict loaded from the session file.
+        """
+        Parses the wrist data from the data dict loaded from the session file.
 
         Args:
             session_data: The data dict loaded from the session file.
@@ -230,7 +243,7 @@ class H2HSessionData(Sequence):
         # Get the list of mocap data for each trial.
         mocap_list = session_data['cropped_data']['cropped_mocap']
         # Get the wrist data for each trial.
-        self._wrist_data = {}
+        wrist_data = {}
         for trial in self._trials:
             # self._trials uses trial number, trial index is trial - 1.
             i = trial - 1
@@ -240,13 +253,15 @@ class H2HSessionData(Sequence):
             sub_2_i = label_list.index(sub_2_wrist_marker)
             # Parse the mocap data for the wrist marker for each subject.
             point_list = mocap_list[i]['Loc']
-            self._wrist_data[trial] = {
+            wrist_data[trial] = {
                 1: self._parse_mocap_frames(point_list[sub_1_i]),
                 2: self._parse_mocap_frames(point_list[sub_2_i])
             }
+        return wrist_data
 
     def _parse_role(self, session_data: Dict[str, Any]) -> Dict[int, str]:
-        """Parses the role data from the data dict loaded from the session file.
+        """
+        Parses the role data from the data dict loaded from the session file.
 
         Args:
             session_data: The data dict loaded from the session file.
@@ -257,19 +272,21 @@ class H2HSessionData(Sequence):
         # Get the role list.
         role_list = session_data['cropped_data']['role']
         # For each trial, record the role.
-        self._role_data = {}
+        role_data = {}
         # For each trial with a valid role, add it to the internal list of trials in this session.
         for trial in self._trials:
             # self._trials uses trial number, trial index is trial - 1.
             i = trial - 1
-            self._role_data[trial] = role_list[i]
-            # DEBUG. Should not go off.
-            if self._role_data[trial] is None:
+            role_data[trial] = role_list[i]
+            # DEBUG. Should not go off.  # TODO: Remove debug after testing.
+            if role_data[trial] is None:
                 print(f'ALARM!!! INVALID TRIAL!!! {trial}')
+        return role_data
 
     @staticmethod
     def _get_timestamps(n_frames: int, fps: float) -> List[float]:
-        """Generates a list of timestamps based on the framerate.
+        """
+        Generates a list of timestamps based on the framerate.
 
         Args:
             n_frames: The number of frames in the series.
@@ -283,7 +300,8 @@ class H2HSessionData(Sequence):
         return np.arange(0, max_time, frame_time, dtype=float).tolist()
 
     def _get_handover(self) -> Dict[int, float]:
-        """Gets the handover data from the already loaded wrist and role data. Does this by looking at the butterworth
+        """
+        Gets the handover data from the already loaded wrist and role data. Does this by looking at the butterworth
         filtered velocity curve for the wrist marker of the follower.
 
         Returns:
@@ -292,7 +310,7 @@ class H2HSessionData(Sequence):
         # Defining thresholds for picking peaks and minimums.
         peak_threshold = 0.2
         min_threshold = 0.1
-        output = {}
+        handover_data = {}
         for trial in self._trials:
             try:
                 follower = 2 if self._role_data[trial] in ['Sub1_IG', 'Sub1_IR'] else 1
@@ -314,12 +332,12 @@ class H2HSessionData(Sequence):
                 else:
                     contact_pt = candidate_mins_i[-1]
                 # Our final output is the timestamp at our contact point.
-                output[trial] = follower_velocity[contact_pt][0]
+                handover_data[trial] = follower_velocity[contact_pt][0]
             # When there's an issue finding handover, we remove the trial.
             except Exception as e:
                 print(f'Problem finding handover in trial {trial}: {e}')
                 self._remove_trial(trial)
-        return output
+        return handover_data
 
     def _get_follower_velocity(self, trial: int, follower: int) -> List[Tuple[float, float]]:
         """
@@ -360,7 +378,8 @@ class H2HSessionData(Sequence):
         return output
 
     def _remove_trial(self, trial: int) -> None:
-        """Removes the given trial from our internal data.
+        """
+        Removes the given trial from our internal data.
 
         Args:
             trial: The trial number to be removed.
@@ -379,7 +398,8 @@ class H2HSessionData(Sequence):
         self._handover_data.pop(trial)
 
     def crop_nan(self) -> None:
-        """Crops all the nan values out of each trial. This is done by taking the smallest crop window over all
+        """
+        Crops all the nan values out of each trial. This is done by taking the smallest crop window over all
         the markers in self._mocap_data and applying it to the rest of the per-frame data.
 
         Modifies the private attributes:
@@ -408,7 +428,8 @@ class H2HSessionData(Sequence):
 
     @staticmethod
     def _get_nan_crop(mocap_frames: np.ndarray) -> Tuple[int, int]:
-        """Gets the start and end indexes to crop out all the NaN values in the mocap_frames.
+        """
+        Gets the start and end indexes to crop out all the NaN values in the mocap_frames.
 
         Args:
             - mocap_frames: A shape (n_frames, 3) numpy array of mocap points in each frame for this trial and marker.
@@ -431,7 +452,8 @@ class H2HSessionData(Sequence):
         return start_crop, end_crop
 
     def _crop_mocap_frames(self, trial: int, start_crop: int, end_crop: int) -> None:
-        """Crops the frames for every marker in self._mocap_data for the given trial.
+        """
+        Crops the frames for every marker in self._mocap_data for the given trial.
 
         Args:
             trial: The trial to crop the frames for.
@@ -445,7 +467,8 @@ class H2HSessionData(Sequence):
             self._mocap_data[trial][marker] = self._mocap_data[trial][marker][start_crop: end_crop]
 
     def _crop_wrist_frames(self, trial: int, start_crop: int, end_crop: int) -> None:
-        """Crops the frames for every subject in self._wrist_data for the given trial.
+        """
+        Crops the frames for every subject in self._wrist_data for the given trial.
 
         Args:
             trial: The trial to crop the frames for.
@@ -459,7 +482,8 @@ class H2HSessionData(Sequence):
             self._mocap_data[trial][subject] = self._mocap_data[trial][subject][start_crop: end_crop]
 
     def crop_to_handover(self) -> None:
-        """Crops all the trials so that they end at object handover.
+        """
+        Crops all the trials so that they end at object handover.
 
         If handover is after the end of the trial, we leave the trial alone.
 
@@ -487,6 +511,8 @@ class H2HSessionData(Sequence):
 def test():
     session_data = H2HSessionData('E:/Datasets/CS 4440 Final Project/mat_files_full/26_M4_F5_cropped_data_v2.mat')
     session_data.load()
+    session_data.crop_nan()
+    session_data.crop_to_handover()
 
 
 if __name__ == '__main__':
