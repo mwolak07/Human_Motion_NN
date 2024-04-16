@@ -1,4 +1,5 @@
 from torch import nn
+import torch
 
 
 class SimpleRNNClassifier(nn.Module):
@@ -20,7 +21,7 @@ class SimpleRNNClassifier(nn.Module):
         - Linear output layer for the classifier.
 
         Args:
-            input_dim: The number of markers in each frame of the input sequence.
+            input_dim: The side of the flattened data dimension for each frame, the number of markers * 3.
             rnn_hidden_dim: The hidden dimension of the RNN cell.
             rnn_layers: The number of RNN layers to stack.
             fc_hidden_dim: The hidden dimension of the fully connected layer.
@@ -36,9 +37,8 @@ class SimpleRNNClassifier(nn.Module):
         # Initialize model layers.
         self.rnn_layers = nn.RNN(input_dim, rnn_hidden_dim, rnn_layers, batch_first=True)
         self.dropout = nn.Dropout(dropout)
-        self.fc_layers = []
-        for i in range(fc_layers):
-            self.fc_layers.append(nn.Linear(rnn_hidden_dim, fc_hidden_dim))
+        self.fc_layers = nn.ModuleList([nn.Linear(rnn_hidden_dim, fc_hidden_dim)
+                                        for i in range(fc_layers)])
         self.out_layer = nn.Linear(fc_hidden_dim, self.num_classes)
 
     def forward(self, x):
@@ -46,11 +46,17 @@ class SimpleRNNClassifier(nn.Module):
         Performs a forward pass of the classifier.
 
         Args:
-            x: A tensor of shape (B, L, self.input_dim, 3).
+            x: A tensor of shape (B, L, self.input_dim).
         """
-        out, _ = self.rnn(x)  # Hidden state initialization defaults to 0s.
+        # Run through rnn layers, hidden state defaults to 0s.
+        out, _ = self.rnn_layers(x)
+        # Average the outputs for each element in the sequence.
+        out = torch.mean(out, dim=1)
+        # Apply dropout after RNN layer.
         out = self.dropout(out)
-        for layer in self.fc_layers:
-            out = layer(out)
+        # Run through fc layers.
+        for fc_layer in self.fc_layers:
+            out = fc_layer(out)
+        # Run through final output layer to get logits.
         out = self.out_layer(out)
         return out

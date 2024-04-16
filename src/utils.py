@@ -1,6 +1,7 @@
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any, Callable
 from torch.utils.data import Dataset, Subset
 import numpy as np
+import torch
 import json
 
 
@@ -129,11 +130,82 @@ def _generate_split_map(n: int, test_split: float, val_split: float) -> Dict[str
     indices = np.arange(0, n)
     np.random.shuffle(indices)
     # Assign each set's indices in the split_map.
-    split_map['test'] = indices[0: n_test]
-    split_map['val'] = indices[n_test: n_test + n_val]
-    split_map['train'] = indices[n_test + n_val: -1]
+    split_1 = n_test
+    split_2 = n_test + n_val
+    split_map['test'] = indices[: split_1]
+    split_map['val'] = indices[split_1: split_2]
+    split_map['train'] = indices[split_2:]
     # DEBUG, check size.  # TODO: Remove this after testing.
     if len(split_map['test']) + len(split_map['val']) + len(split_map['train']) != len(indices):
         print(f'PROBLEM WITH SPLIT MAP AHHHH!')
     # Return our result
     return split_map
+
+
+def txt_list_append(file_path: str, value: Any) -> None:
+    """
+    Appends the given value to the list stored in the given text file.
+
+    Args:
+        file_path: Path to the text file.
+        value: Value to append.
+    """
+    with open(file_path, 'a+') as f:
+        f.write(f'({value})\n')
+
+
+def txt_list_read(file_path: str, type_func: Optional[Callable[[str], Any]] = None) -> List[Any]:
+    """
+    Reads the list stored in the given text file.
+
+    Args:
+        file_path: Path to the text file.
+        type_func: Function to convert the strings stored in the txt file to the desired type.
+
+    Returns:
+        The list of values stored in the file.
+    """
+    with open(file_path, 'r') as f:
+        out_list = f.read().split('\n')[:-1]
+    if type_func is not None:
+        out_list = [type_func(value) for value in out_list]
+    return out_list
+
+
+def show_grads(model) -> None:
+    """
+    Prints the gradients of the parameters of the given model. Useful for debugging.
+
+    Args:
+        model: The model to view the gradients of.
+    """
+    for name, param in model.named_parameters():
+        print(f'{name}\n{param.grad}')
+
+
+def dataloader_isnan(dataloader) -> bool:
+    """
+    Checks if the dataloader contains any NaN values.
+
+    Args:
+        dataloader: The dataloader to be checked.
+
+    Returns:
+        True if there were nans, False if there were not.
+    """
+    output = False
+    for batch, (x, label) in enumerate(dataloader):
+        # Manually check x.
+        for sequence in range(x.shape[0]):
+            for frame in range(x[sequence].shape[0]):
+                for i in range(x[sequence][frame].shape[0]):
+                    value = x[sequence][frame][i]
+                    if torch.isnan(value):
+                        print(f'NaN found in x at batch: {batch}, sequence: {sequence}, frame: {frame}, value: {value}')
+                        output = True
+        # Manually check label.
+        for sequence in range(label.shape[0]):
+            if torch.isnan(label[sequence]):
+                print(f'NaN found in label at batch: {batch}, sequence: {sequence}')
+                output = True
+    return output

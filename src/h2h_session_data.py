@@ -63,7 +63,7 @@ class H2HSessionData(Sequence):
     _handover_data: Dict[int, float]
 
     def __init__(self, session_file: str, target_markers: Optional[List[str]] = None,
-                 print_warnings: Optional[bool] = True, debug: Optional[bool] = False):
+                 print_warnings: Optional[bool] = False, debug: Optional[bool] = False):
         """
         Initializes the object with the given session file and target markers.
         Does not read any data until .load() is called.
@@ -322,6 +322,7 @@ class H2HSessionData(Sequence):
         Returns:
             The handover data, represented as: {trial: timestamp}.
         """
+        bad_trials = []
         # Defining thresholds for picking peaks and minimums.
         peak_threshold = 0.2
         min_threshold = 0.1
@@ -350,11 +351,15 @@ class H2HSessionData(Sequence):
                 handover_data[trial] = follower_velocity[contact_pt][0]
             # When there's an issue finding handover, we remove the trial.
             except Exception as e:
+                handover_data[trial] = None
+                bad_trials.append(trial)
                 if self.print_warnings:
                     print(f'Warning: problem finding handover in trial {trial}: {type(e).__name__}: {e}')
                     if self.debug:
                         print(traceback.format_exc())
-                self._remove_trial(trial)
+        # Remove the bad trials.
+        for trial in bad_trials:
+            self._remove_trial(trial)
         return handover_data
 
     def _get_follower_velocity(self, trial: int, follower: int) -> List[Tuple[float, float]]:
@@ -428,7 +433,10 @@ class H2HSessionData(Sequence):
         Modifies the private attributes:
             - self._mocap_data
             - self._wrist_data
+            - self._role_data
+            - self._handover_data
         """
+        bad_trials = []
         # Iterate over each trial.
         for trial in self._trials:
             # Get the start and end crop for each marker.
@@ -443,11 +451,13 @@ class H2HSessionData(Sequence):
             end_crop = min(end_crops)
             # If the crops eliminate all the frames, throw out the trial.
             if end_crop <= start_crop:
-                self._remove_trial(trial)
+                bad_trials.append(trial)
             # Otherwise, crop the internal data.
             else:
                 self._crop_mocap_frames(trial, start_crop, end_crop)
                 self._crop_wrist_frames(trial, start_crop, end_crop)
+        for trial in bad_trials:
+            self._remove_trial(trial)
 
     @staticmethod
     def _get_nan_crop(mocap_frames: List[Tuple[float, np.ndarray]]) -> Tuple[int, int]:
@@ -508,6 +518,32 @@ class H2HSessionData(Sequence):
         for subject in self._wrist_data[trial]:
             self._wrist_data[trial][subject] = self._wrist_data[trial][subject][start_crop: end_crop]
 
+    def drop_nan(self) -> None:
+        """
+        Drops any trials with nan values in self._mocap_data.
+
+        Modifies the private attributes:
+            - self._mocap_data
+            - self._wrist_data
+            - self._role_data
+            - self._handover_data
+        """
+        # Keep track of trials to remove.
+        bad_trials = []
+        # Iterate over each trial.
+        for trial in self._trials:
+            # Iterate over the markers in each trial.
+            for marker in self._mocap_data[trial]:
+                # If any of the timestamps or markers are nan, remove the trial, and move on to the next.
+                timestamps = np.array([frame[0] for frame in self._mocap_data[trial][marker]])
+                values = np.array([frame[1] for frame in self._mocap_data[trial][marker]])
+                if np.any(np.isnan(timestamps)) or np.any(np.isnan(values)):
+                    bad_trials.append(trial)
+                    break
+        # Remove the bad trials.
+        for trial in bad_trials:
+            self._remove_trial(trial)
+
     def crop_to_handover(self) -> None:
         """
         Crops all the trials so that they end at object handover.
@@ -542,14 +578,81 @@ class H2HSessionData(Sequence):
                 self._crop_wrist_frames(trial, 0, end_crop)
 
 
-def test():
-    session_data = H2HSessionData(session_file='E:/Datasets/CS 4440 Final Project/mat_files_full/test_data.mat',
-                                  debug=True)
+def short_test() -> None:
+    """
+    Short test for H2HSessionData.
+    """
+    session_file = 'E:/Datasets/CS 4440 Final Project/mat_files_full/test_data.mat'
+    session_data = H2HSessionData(session_file=session_file, debug=True)
     session_data.load()
     # session_data.crop_to_handover()  # TODO: This is likely wrong, I do not like the method here.
     session_data.crop_nan()
-    print()
+    session_data.drop_nan()
+    h2h_session_data_isnan(session_data)
+    print(f'All markers trials: {session_data.trials()}')
+    target_markers = ['Sub1_C7', 'Sub1_Th7', 'Sub1_SXS', 'Sub1_LPSIS', 'Sub1_RPSIS',
+                      'Sub1_LAC', 'Sub1_LHME', 'Sub1_LRSP',
+                      'Sub1_RAC', 'Sub1_RHME', 'Sub1_RRSP',
+                      'Sub1_LFT', 'Sub1_LFLE', 'Sub1_LLM', 'Sub1_L2MH',
+                      'Sub1_RFT', 'Sub1_RFLE', 'Sub1_RLM', 'Sub1_R2MH',
+                      'Sub2_C7', 'Sub2_Th7', 'Sub2_SXS', 'Sub2_LPSIS', 'Sub2_RPSIS',
+                      'Sub2_LAC', 'Sub2_LHME', 'Sub2_LRSP',
+                      'Sub2_RAC', 'Sub2_RHME', 'Sub2_RRSP',
+                      'Sub2_LFT', 'Sub2_LFLE', 'Sub2_LLM', 'Sub2_L2MH',
+                      'Sub2_RFT', 'Sub2_RFLE', 'Sub2_RLM', 'Sub2_R2MH']
+    session_data = H2HSessionData(session_file=session_file, target_markers=target_markers, debug=True)
+    session_data.load()
+    # session_data.crop_to_handover()  # TODO: This is likely wrong, I do not like the method here.
+    session_data.crop_nan()
+    session_data.drop_nan()
+    h2h_session_data_isnan(session_data)
+    print(f'Some markers trials: {session_data.trials()}')
+
+
+def long_test() -> None:
+    """
+    Long test for H2HSessionData.
+    """
+    session_file = 'E:/Datasets/CS 4440 Final Project/mat_files_full/26_M4_F5_cropped_data_v2.mat'
+    session_data = H2HSessionData(session_file=session_file, debug=True)
+    session_data.load()
+    # session_data.crop_to_handover()  # TODO: This is likely wrong, I do not like the method here.
+    session_data.crop_nan()
+    session_data.drop_nan()
+    h2h_session_data_isnan(session_data)
+    print(f'All markers trials: {session_data.trials()}')
+
+
+def h2h_session_data_isnan(session_data: H2HSessionData) -> bool:
+    """
+    Checks if the H2HSessionData object contains any NaN values.
+
+    Args:
+        session_data: The H2HSessionData object to be checked.
+
+    Returns:
+        True if there were nans, False if there were not.
+    """
+    output = False
+    for trial in session_data.trials():
+        # Get the trial data.
+        trial_data = session_data[trial]
+        # Check the mocap data.
+        mocap_data = trial_data['mocap']
+        for marker in mocap_data.keys():
+            for frame in range(len(mocap_data[marker])):
+                timestamp, point = mocap_data[marker][frame]
+                if np.isnan(timestamp):
+                    print(f'NaN found in mocap timestamp, trial: {trial}, marker: {marker}, frame: {frame}')
+                    output = True
+                for i in range(len(point)):
+                    value = point[i]
+                    if np.isnan(value):
+                        print(f'NaN found in mocap point, trial: {trial}, marker: {marker}, frame: {frame}, i: {i}')
+                        output = True
+    return output
 
 
 if __name__ == '__main__':
-    test()
+    # short_test()
+    long_test()
