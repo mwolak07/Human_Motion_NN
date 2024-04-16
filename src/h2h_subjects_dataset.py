@@ -17,9 +17,10 @@ class H2HSubjectsDataset(Dataset):
     Represents a dataset of H2H mocap sequences split between subject 1 and subject 2 and labeled with which subject
     they belong to.
 
-    We split the markers for subject 1 and subject 2 into separate sequences, and label them with 0 for subject 1
-    and 1 for subject 2. We have a max length for each sequence of frames, and use a sliding window approach to expand
-    one handover motion into multiple sequences.
+    Notes:
+    - We split the markers for subject 1 and subject 2 into separate sequences
+    - Labels are 0 for subject 1 and 1 for subject 2.
+    - We have a sequence length, and use a sliding window approach to expand one handover motion into multiple samples.
 
     Attributes:
         object_group: (class attribute) The name of the joint group for the object.
@@ -93,9 +94,12 @@ class H2HSubjectsDataset(Dataset):
 
     def _load_sequences(self) -> Tuple[List[Tensor], List[Tensor]]:
         """
-        Takes the trials from each Session and loads the marker data in as separate sequences, and splits each
-        subject's markers into its own sequence. Formats each sequence as a tensor of shape (L, M * 3).
-        The labels are which subject each sequence belongs to, with 0 = subject 1 and 1 = subject 2.
+        Takes each session and loads the mocap sequences from each trial, with subject 1 and subject 2's markers split
+        into separate sequences. Labels each sequence according to which subject it belongs to.
+
+        Notes:
+            - Each sequence is a tensor of shape (L, M * 3), where L is length and M is number of markers.
+            - Each sequence has a label, 0 = subject 1, 1 = subject 2.
 
         Returns:
             Sequences, a tensor of shape (N, L, M * 3), with two sequences per trail for all the sessions.
@@ -121,8 +125,9 @@ class H2HSubjectsDataset(Dataset):
 
     def _load_session_data(self, session_file: str) -> H2HSessionData:
         """
-        Loads the session data from the session file into an H2HSessionData object. Also crops each trial to exclude
-        nan markers, and cops the end of each trial to the time of handover.
+        Loads the session data from the session file into an H2HSessionData object, and modifies it as needed.
+        - Crops each trial to exclude leading and trailing NaN markers.
+        - Drops trials with NaN markers in the middle of sequences.
 
         Args:
             session_file: Path to the session data file.
@@ -139,10 +144,13 @@ class H2HSubjectsDataset(Dataset):
 
     def _parse_markers(self, mocap_data: Dict[str, List[Tuple[float, Point]]], target_markers: List[str]) -> Tensor:
         """
-        Parses the marker data corresponding to the given target markers (in order) from the given trial data.
-        Reshapes it into a tensor of shape (L, M * 3), by putting frames first, and markers second.
-        The markers are ordered according to the sorted joints, then the sorted order of the marker names.
-        The 3D points for each marker are flattened into one dimension M * 3.
+        Parses the marker data from {markers: [(timestamp, point)]} into a tensor of shape (L, M * 3), where L is
+        the length of the sequence, and M is the number of markers.
+
+        Notes:
+            - Frames become the first dimension, with the points for each marker flattened into a data vector.
+            - Markers are ordered according to the sorted joint groups.
+            - Points x, y, z coordinates are sequentially put into the data vector for each marker.
 
         Args:
             mocap_data: The dict of marker positions for each marker label throughout the trial.
@@ -150,7 +158,7 @@ class H2HSubjectsDataset(Dataset):
 
         Returns:
             A tensor of shape (L, M * 3), which represents a sequence the length of the trial with the markers data
-            for each joint in sorted order.
+            for each joint group in sorted order.
         """
         # Set the output to a tensor of shape (L, M * 3).
         L = len(mocap_data[target_markers[0]])
@@ -167,7 +175,7 @@ class H2HSubjectsDataset(Dataset):
 
     def _split_sequences(self, sequences: Tensor, sequence_labels: Tensor):
         """
-        Splits the sequences corresponding to entire trials into ones of length self.sequence_length, and using a
+        Splits the sequences corresponding to entire trials into ones of length self.sequence_length, using a
         sliding window method to generate multiple sequences for each trial. Inflates the labels to correspond to
         these changes.
 
@@ -226,36 +234,43 @@ class H2HSubjectsDataset(Dataset):
         return self._samples[idx], self._labels[idx]
 
 
-def short_test():
+def main() -> None:
+    """
+    Main function that runs when this file is invoked, to test this implementation.
+    """
+    short_test()
+    long_test()
+
+
+def short_test() -> None:
     """
     Short test for H2HSubjectsDataset.
     """
     session_files = ['E:/Datasets/CS 4440 Final Project/mat_files_full/test_data.mat']
     sequence_length = 5
-    test(session_files, sequence_length)
+    joint_groups_file = 'joint_groups.json'
+    joint_groups = ['spine', 'left arm', 'right arm', 'left leg', 'right leg']
+    dataset = H2HSubjectsDataset(session_files, sequence_length, joint_groups_file, joint_groups)
+    test(dataset)
 
 
-def long_test():
+def long_test() -> None:
     """
     Short test for H2HSubjectsDataset.
     """
     session_files = ['E:/Datasets/CS 4440 Final Project/mat_files_full/test_data.mat',
                      'E:/Datasets/CS 4440 Final Project/mat_files_full/26_M4_F5_cropped_data_v2.mat']
     sequence_length = 10
-    test(session_files, sequence_length)
-
-
-def test(session_files, sequence_length):
-    """
-    Runs a test for the specified sessions and sequence length.
-
-    Args:
-        session_files: The list of session files to load data from.
-        sequence_length: The length of each sequence in the session.
-    """
     joint_groups_file = 'joint_groups.json'
     joint_groups = ['spine', 'left arm', 'right arm', 'left leg', 'right leg']
     dataset = H2HSubjectsDataset(session_files, sequence_length, joint_groups_file, joint_groups)
+    test(dataset)
+
+
+def test(dataset: Dataset) -> None:
+    """
+    Runs a test for the specified sessions and sequence length.
+    """
     sample, label = dataset[0]
     sample_shape, label_shape = sample.shape, label.shape
     for i in range(len(dataset)):
@@ -263,14 +278,13 @@ def test(session_files, sequence_length):
         if sample.shape != sample_shape or label.shape != label.shape:
             print(f'Found sample {i} with different shape!')
     print(f'Num samples: {len(dataset)}')
-    print(f'sample shape, label shape: {sample_shape}, {label_shape}')
+    print(f'sample shape, last label: {sample_shape}, {label}')
     print(f'sample type, label type: {sample.dtype}, {label.dtype}')
-    is_nan = h2h_subjects_dataset_isnan(dataset)
+    is_nan = h2h_dataset_isnan(dataset)
     print(f'is_nan: {is_nan}')
 
 
-
-def h2h_subjects_dataset_isnan(dataset: H2HSubjectsDataset) -> bool:
+def h2h_dataset_isnan(dataset: Dataset) -> bool:
     """
     Checks if an H2HSubjectsDataset object contains any NaN values.
 
@@ -298,5 +312,4 @@ def h2h_subjects_dataset_isnan(dataset: H2HSubjectsDataset) -> bool:
 
 
 if __name__ == '__main__':
-    short_test()
-    long_test()
+    main()

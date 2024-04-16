@@ -575,6 +575,14 @@ class H2HSessionData(Sequence):
                 self._crop_wrist_frames(trial, 0, end_crop)
 
 
+def main() -> None:
+    """
+    Main function that runs when this file is invoked, to test this implementation.
+    """
+    short_test()
+    long_test()
+
+
 def short_test() -> None:
     """
     Short test for H2HSessionData.
@@ -651,5 +659,4 @@ def h2h_session_data_isnan(session_data: H2HSessionData) -> bool:
 
 
 if __name__ == '__main__':
-    # short_test()
-    long_test()
+    main()

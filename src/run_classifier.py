@@ -14,7 +14,7 @@ from utils import txt_list_append, txt_list_read
 
 
 def train_classifier(train_loader: DataLoader, val_loader: DataLoader, device: torch.device,
-                     model: nn.Module, optimizer: Optimizer, criterion: Callable, epochs: int,
+                     model: nn.Module, optimizer: Optimizer, criterion: Callable, epochs: int, grad_norm_clip: float,
                      save_dir: str, resume: bool = False) -> None:
     """
     Train a classifier model on the given training and validation sets.
@@ -27,6 +27,7 @@ def train_classifier(train_loader: DataLoader, val_loader: DataLoader, device: t
         optimizer: Optimizer to be used for training.
         criterion: Loss function to be used for training.
         epochs: Number of epochs to train for.
+        grad_norm_clip: Max norm to clip gradients to.
         save_dir: Directory to save checkpoints, logs, and best model.
         resume: Whether to resume training from the checkpoint dir or not.
     """
@@ -50,7 +51,7 @@ def train_classifier(train_loader: DataLoader, val_loader: DataLoader, device: t
         t = time.time()
         # Iterate over the training samples.
         model, optimizer, train_loss, train_acc = train_classifier_step(train_loader, device,
-                                                                        model, optimizer, criterion)
+                                                                        model, optimizer, criterion, grad_norm_clip)
         train_loss_list.append(train_loss)
         train_acc_list.append(train_acc)
         # Iterate over the validation samples.
@@ -73,7 +74,7 @@ def train_classifier(train_loader: DataLoader, val_loader: DataLoader, device: t
 
 
 def train_classifier_step(dataloader: DataLoader, device: torch.device,
-                          model: nn.Module, optimizer: Optimizer, criterion: Callable) \
+                          model: nn.Module, optimizer: Optimizer, criterion: Callable, grad_norm_clip: float) \
         -> Tuple[nn.Module, Optimizer, float, float]:
     """
 
@@ -83,6 +84,7 @@ def train_classifier_step(dataloader: DataLoader, device: torch.device,
         model: Classifier model to be trained.
         optimizer: Optimizer to be used for training.
         criterion: Loss function to be used for training.
+        grad_norm_clip: Max norm to clip gradients to.
 
     Returns:
         The model with updated weights.
@@ -105,6 +107,7 @@ def train_classifier_step(dataloader: DataLoader, device: torch.device,
         loss = criterion(logits, label)
         # Backward pass.
         loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), grad_norm_clip)
         optimizer.step()
         # Compute and store metrics.
         total_loss += loss.item()

@@ -5,4 +5,5 @@ scikit-learn == 1.4.2
 scikit-spatial == 7.2.0
 scipy == 1.13.0
 torch == 2.2.2
+torchinfo == 1.8.0
 tqdm == 4.66.2
