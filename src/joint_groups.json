@@ -1,7 +1,7 @@
 {
-  "spine": ["C7", "Th7", "SXS", "LPSIS", "RPSIS"],
   "left arm": ["LAC", "LHME", "LRSP"],
-  "right arm": ["RAC", "RHME", "RRSP"],
   "left leg": ["LFT", "LFLE", "LLM", "L2MH"],
-  "right leg": ["RFT", "RFLE", "RLM", "R2MH"]
+  "right arm": ["RAC", "RHME", "RRSP"],
+  "right leg": ["RFT", "RFLE", "RLM", "R2MH"],
+  "spine": ["C7", "Th7", "SXS", "LPSIS", "RPSIS"]
 }

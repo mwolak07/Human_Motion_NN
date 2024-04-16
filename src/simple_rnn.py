@@ -3,6 +3,24 @@ import torch
 
 
 class SimpleRNNClassifier(nn.Module):
+    """
+    Represents a simple RNN classifier, consisting of:
+        - rnn_layers RNN layers stacked on each other.
+        - 1 dropout layer.
+        - fc_layers Linear layers stacked on each other.
+        - 1 linear output layer for the classifier.
+
+    Attributes:
+        rnn_layers: RNN layers stacked on each other.
+        dropout: The dropout layer between the RNN and Linear layers.
+        fc_layers: Linear layers stacked on each other.
+        out_layer: Linear output layer for the classifier.
+    """
+    rnn_layers: nn.RNN
+    dropout: nn.Dropout
+    fc_layers: nn.ModuleList
+    out_layer: nn.Linear
+
     def __init__(
             self,
             input_dim: int,
@@ -14,11 +32,7 @@ class SimpleRNNClassifier(nn.Module):
             num_classes: int
     ):
         """
-        Initializes a simple RNN model:
-        - rnn_layers RNN layers stacked on each other.
-        - Dropout layer.
-        - fc_layers Linear layers stacked on each other.
-        - Linear output layer for the classifier.
+        Initializes a SimpleRnnClassifier object with the given specifications.
 
         Args:
             input_dim: The side of the flattened data dimension for each frame, the number of markers * 3.
@@ -29,17 +43,11 @@ class SimpleRNNClassifier(nn.Module):
             num_classes: The number of classes in the output.
         """
         super(SimpleRNNClassifier, self).__init__()
-        # Initialize useful internal variables.
-        self.input_dim = input_dim
-        self.rnn_hidden_dim = rnn_hidden_dim
-        self.fc_hidden_dim = fc_hidden_dim
-        self.num_classes = num_classes
-        # Initialize model layers.
         self.rnn_layers = nn.RNN(input_dim, rnn_hidden_dim, rnn_layers, batch_first=True)
         self.dropout = nn.Dropout(dropout)
         self.fc_layers = nn.ModuleList([nn.Linear(rnn_hidden_dim, fc_hidden_dim)
-                                        for i in range(fc_layers)])
-        self.out_layer = nn.Linear(fc_hidden_dim, self.num_classes)
+                                        for _ in range(fc_layers)])
+        self.out_layer = nn.Linear(fc_hidden_dim, num_classes)
 
     def forward(self, x):
         """
@@ -54,7 +62,7 @@ class SimpleRNNClassifier(nn.Module):
         out = torch.mean(out, dim=1)
         # Apply dropout after RNN layer.
         out = self.dropout(out)
-        # Run through fc layers.
+        # Run through dense layers.
         for fc_layer in self.fc_layers:
             out = fc_layer(out)
         # Run through final output layer to get logits.

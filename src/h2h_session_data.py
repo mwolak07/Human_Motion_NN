@@ -115,7 +115,7 @@ class H2HSessionData(Sequence):
             raise KeyError()
         # Construct each element of the trial data, accounting for missing data.
         mocap_data = self._getitem_data_copy(self._mocap_data, k)
-        role_data = self._getitem_data_copy(self._role_data, k)
+        role_data = self._role_data[k]  # Strings are immutable.
         handover_data = self._getitem_data_copy(self._handover_data, k)
         # Return a dict with all the data.
         return {
@@ -292,7 +292,7 @@ class H2HSessionData(Sequence):
         for trial in self._trials:
             # self._trials uses trial number, trial index is trial - 1.
             i = trial - 1
-            role_data[trial] = role_list[i]
+            role_data[trial] = role_list[i][0]
         return role_data
 
     @staticmethod

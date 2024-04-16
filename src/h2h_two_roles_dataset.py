@@ -4,7 +4,7 @@ from torch import Tensor
 from h2h_subjects_dataset import H2HSubjectsDataset, test
 
 
-class H2HRolesDataset(H2HSubjectsDataset):
+class H2HTwoRolesDataset(H2HSubjectsDataset):
     """
     Represents a dataset of H2H mocap sequences split between subject 1 and subject 2 labeled with each subject's role
     as follower or initiator.
@@ -36,7 +36,7 @@ class H2HRolesDataset(H2HSubjectsDataset):
 
         Notes:
             - Each sequence is a tensor of shape (L, M * 3), where L is length and M is number of markers.
-            - Each sequence has a label, 0 = subject 1, 1 = subject 2.
+            - Each sequence has a label, 0 = initiator, 1 = follower.
 
         Returns:
             Sequences, a tensor of shape (N, L, M * 3), with two sequences per trail for all the sessions.
@@ -77,17 +77,27 @@ class H2HRolesDataset(H2HSubjectsDataset):
 
         Returns:
             0 for initiator, 1 for follower.
+
+        Raises:
+            ValueError: The subject isn't one of (1, 2).
+                        The role isn't one of ('Sub1_IG', 'Sub1_IR', 'Sub2_IG', 'Sub2_IR').
         """
         if subject == 1:
             if role_data in ['Sub1_IG', 'Sub1_IR']:
                 return 0
-            else:
+            if role_data in ['Sub2_IG', 'Sub2_IR']:
                 return 1
-        else:
+            else:
+                raise ValueError(f'The role {role_data} is not one of "Sub1_IG", "Sub1_IR", "Sub2_IG", "Sub2_IR".')
+        if subject == 2:
             if role_data in ['Sub2_IG', 'Sub2_IR']:
                 return 0
-            else:
+            if role_data in ['Sub1_IG', 'Sub1_IR']:
                 return 1
+            else:
+                raise ValueError(f'The role {role_data} is not one of "Sub1_IG", "Sub1_IR", "Sub2_IG", "Sub2_IR".')
+        else:
+            raise ValueError(f'The subject {subject} is not one of (1, 2).')
 
 
 def main() -> None:
@@ -106,7 +116,7 @@ def short_test() -> None:
     sequence_length = 5
     joint_groups_file = 'joint_groups.json'
     joint_groups = ['spine', 'left arm', 'right arm', 'left leg', 'right leg']
-    dataset = H2HRolesDataset(session_files, sequence_length, joint_groups_file, joint_groups)
+    dataset = H2HTwoRolesDataset(session_files, sequence_length, joint_groups_file, joint_groups)
     test(dataset)
 
 
@@ -119,7 +129,7 @@ def long_test() -> None:
     sequence_length = 10
     joint_groups_file = 'joint_groups.json'
     joint_groups = ['spine', 'left arm', 'right arm', 'left leg', 'right leg']
-    dataset = H2HRolesDataset(session_files, sequence_length, joint_groups_file, joint_groups)
+    dataset = H2HTwoRolesDataset(session_files, sequence_length, joint_groups_file, joint_groups)
     test(dataset)
 
 

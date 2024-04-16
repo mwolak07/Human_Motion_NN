@@ -7,8 +7,8 @@ import torch
 import os
 
 from run_classifier import train_classifier, test_classifier
-from h2h_subjects_dataset import H2HSubjectsDataset
-from simple_rnn import SimpleRNNClassifier
+from h2h_two_roles_dataset import H2HTwoRolesDataset
+from functional_unit_rnn import FunctionalUnitRNNClassifier
 from utils import data_split
 
 
@@ -31,7 +31,7 @@ sequence_length = 25
 joint_groups_file = 'joint_groups.json'
 joint_groups = ['spine', 'left arm', 'right arm', 'left leg', 'right leg']
 print(f'Loading sessions...')
-dataset = H2HSubjectsDataset(session_files, sequence_length, joint_groups_file, joint_groups)
+dataset = H2HTwoRolesDataset(session_files, sequence_length, joint_groups_file, joint_groups)
 print()
 train_set, val_set, test_set, _ = data_split(dataset=dataset, test_split=0.2, val_split=0.2)
 train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=False)
@@ -39,13 +39,15 @@ val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
 # Set up the model.
-model = SimpleRNNClassifier(57,
-                            57,
-                            2,
-                            0.25,
-                            57,
-                            1,
-                            2)
+model = FunctionalUnitRNNClassifier(joint_groups_file,
+                                    1.0,
+                                    1,
+                                    1.0,
+                                    1,
+                                    0.25,
+                                    150,
+                                    1,
+                                    2)
 print(f'Model summary:')
 summary(model, input_size=(batch_size, sequence_length, 57))
 print()
@@ -58,4 +60,4 @@ train_classifier(train_loader, val_loader, device, model, optimizer, criterion, 
 print()
 # Test the model.
 print(f'Testing model on {device} with {len(test_loader)} batches of size {batch_size}...')
-pred_list, acc = test_classifier(test_loader, device, experiment_dir, SimpleRNNClassifier)
+pred_list, acc = test_classifier(test_loader, device, experiment_dir, FunctionalUnitRNNClassifier)
