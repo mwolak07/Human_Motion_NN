@@ -293,9 +293,6 @@ class H2HSessionData(Sequence):
             # self._trials uses trial number, trial index is trial - 1.
             i = trial - 1
             role_data[trial] = role_list[i]
-            # DEBUG. Should not go off.  # TODO: Remove debug after testing.
-            if role_data[trial] is None:
-                print(f'ALARM!!! INVALID TRIAL!!! {trial}')
         return role_data
 
     @staticmethod

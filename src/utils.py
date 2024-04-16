@@ -135,9 +135,6 @@ def _generate_split_map(n: int, test_split: float, val_split: float) -> Dict[str
     split_map['test'] = indices[: split_1]
     split_map['val'] = indices[split_1: split_2]
     split_map['train'] = indices[split_2:]
-    # DEBUG, check size.  # TODO: Remove this after testing.
-    if len(split_map['test']) + len(split_map['val']) + len(split_map['train']) != len(indices):
-        print(f'PROBLEM WITH SPLIT MAP AHHHH!')
     # Return our result
     return split_map
 

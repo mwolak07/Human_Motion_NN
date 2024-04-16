@@ -8,7 +8,7 @@ from utils import joint_groups_to_marker_labels, load_joint_group_names
 from h2h_session_data import H2HSessionData
 
 
-# TODO: Add joint group maps that can be shared with the model, to ensure correct unpacking of samples.
+# TODO: Add masking with padding tokens for small sequences.
 # TODO: Get a serializable format to save this to and later load from on demand (TFRecord is a candidate).
 
 
