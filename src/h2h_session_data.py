@@ -422,6 +422,39 @@ class H2HSessionData(Sequence):
         if self._handover_data is not None:
             self._handover_data.pop(trial)
 
+    def crop_to_handover(self) -> None:
+        """
+        Crops all the trials so that they end at object handover.
+
+        If handover is after the end of the trial, we leave the trial alone.
+
+        Modifies the private attributes:
+            - self._mocap_data
+            - self._wrist_data
+        """
+        # Iterate over each trial.
+        for trial in self._trials:
+            # Get the handover time from the internal list.
+            handover_time = self._handover_data[trial]
+            # Get the timestamp list from the wrist data.
+            timestamps = [frame[0] for frame in self._wrist_data[trial][1]]
+            # Handover is past the end, leave the trial alone.
+            if handover_time > timestamps[-1]:
+                continue
+            # Handover is within the timestamps, perform crop.
+            else:
+                # Get the index of the closest timestamp.
+                min_error = float('inf')
+                end_crop = 0
+                for i, timestamp in enumerate(timestamps):
+                    error = abs(timestamp - handover_time)
+                    if error < min_error:
+                        min_error = error
+                        end_crop = i
+                # Crop to handover.
+                self._crop_mocap_frames(trial, 0, end_crop)
+                self._crop_wrist_frames(trial, 0, end_crop)
+
     def crop_nan(self) -> None:
         """
         Crops all the nan values out of each trial. This is done by taking the smallest crop window over all
@@ -541,38 +574,31 @@ class H2HSessionData(Sequence):
         for trial in bad_trials:
             self._remove_trial(trial)
 
-    def crop_to_handover(self) -> None:
+    def drop_small_trials(self, min_length: int = 10) -> None:
         """
-        Crops all the trials so that they end at object handover.
+        Drops all trials with less than min_length frames in them.
 
-        If handover is after the end of the trial, we leave the trial alone.
+        Args:
+            min_length: The minimum length a trial has to be to not get dropped.
 
         Modifies the private attributes:
             - self._mocap_data
             - self._wrist_data
+            - self._role_data
+            - self._handover_data
         """
+        # Keep track of trials to remove.
+        bad_trials = []
         # Iterate over each trial.
         for trial in self._trials:
-            # Get the handover time from the internal list.
-            handover_time = self._handover_data[trial]
-            # Get the timestamp list from the wrist data.
-            timestamps = [frame[0] for frame in self._wrist_data[trial][1]]
-            # Handover is past the end, leave the trial alone.
-            if handover_time > timestamps[-1]:
-                continue
-            # Handover is within the timestamps, perform crop.
-            else:
-                # Get the index of the closest timestamp.
-                min_error = float('inf')
-                end_crop = 0
-                for i, timestamp in enumerate(timestamps):
-                    error = abs(timestamp - handover_time)
-                    if error < min_error:
-                        min_error = error
-                        end_crop = i
-                # Crop to handover.
-                self._crop_mocap_frames(trial, 0, end_crop)
-                self._crop_wrist_frames(trial, 0, end_crop)
+            # Make our decision based on the length of the wrist data.
+            wrist_1_len = len(self._wrist_data[trial][1])
+            wrist_2_len = len(self._wrist_data[trial][2])
+            if wrist_1_len < min_length or wrist_2_len < min_length:
+                bad_trials.append(trial)
+        # Remove the bad trials.
+        for trial in bad_trials:
+            self._remove_trial(trial)
 
 
 def main() -> None:
@@ -610,6 +636,7 @@ def short_test() -> None:
     # session_data.crop_to_handover()  # TODO: This is likely wrong, I do not like the method here.
     session_data.crop_nan()
     session_data.drop_nan()
+    session_data.drop_small_trials()
     h2h_session_data_isnan(session_data)
     print(f'Some markers trials: {session_data.trials()}')
 
@@ -624,6 +651,7 @@ def long_test() -> None:
     # session_data.crop_to_handover()  # TODO: This is likely wrong, I do not like the method here.
     session_data.crop_nan()
     session_data.drop_nan()
+    session_data.drop_small_trials()
     h2h_session_data_isnan(session_data)
     print(f'All markers trials: {session_data.trials()}')
 

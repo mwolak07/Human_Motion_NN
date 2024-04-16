@@ -140,6 +140,7 @@ class H2HSubjectsDataset(Dataset):
         session_data.load()
         session_data.crop_nan()
         session_data.drop_nan()
+        session_data.drop_small_trials(self.sequence_length)
         return session_data
 
     def _parse_markers(self, mocap_data: Dict[str, List[Tuple[float, Point]]], target_markers: List[str]) -> Tensor:
