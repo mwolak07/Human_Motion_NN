@@ -13,9 +13,9 @@ from utils import data_split
 
 
 # Set up the experiment.
-batch_size = 128
-epochs = 10
-lr = 0.001
+batch_size = 512
+epochs = 2
+lr = 0.0001
 grad_norm_clip = 1.0
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 now = datetime.now().strftime('%d-%m-%Y_%H-%M-%S')
@@ -26,7 +26,17 @@ if os.path.exists(experiment_dir):
 os.makedirs(experiment_dir, exist_ok=False)
 
 # Set up the dataset.
-session_files = ['E:/Datasets/CS 4440 Final Project/mat_files_full/26_M4_F5_cropped_data_v2.mat']
+session_files = ['E:/Datasets/CS 4440 Final Project/mat_files_full/26_M4_F5_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/27_F5_F2_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/28_F5_F1_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/29_F1_F2_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/30_M1_F1_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/31_M2_F4_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/32_M1_F5_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/33_F4_M1_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/34_F4_M3_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/35_F4_F2_cropped_data_v2.mat',
+                 'E:/Datasets/CS 4440 Final Project/mat_files_full/36_F4_F5_cropped_data_v2.mat']
 sequence_length = 25
 joint_groups_file = 'joint_groups.json'
 joint_groups = ['spine', 'left arm', 'right arm', 'left leg', 'right leg']
