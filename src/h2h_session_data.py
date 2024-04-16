@@ -1,8 +1,8 @@
 from typing import ClassVar, List, Dict, Tuple, Optional, Set, Any
 from collections.abc import Sequence
-from skspatial.objects import Point
 from scipy import signal
 import numpy as np
+import traceback
 import mat73
 
 
@@ -52,17 +52,18 @@ class H2HSessionData(Sequence):
     """
     mocap_fps: ClassVar[float] = 100.0
     wrist_marker_name: ClassVar[str] = 'RUSP'
-    sub_1_tag: ClassVar[str] = 'Sub1'
-    sub_2_tag: ClassVar[str] = 'Sub2'
+    sub_1_tag: ClassVar[str] = 'Sub1_'
+    sub_2_tag: ClassVar[str] = 'Sub2_'
     session_file: str
     target_markers: Set[str]
     _trials: List[int]
-    _mocap_data: Dict[int, Dict[str, List[Tuple[float, Point]]]]
-    _wrist_data: Dict[int, Dict[int, List[Tuple[float, Point]]]]
+    _mocap_data: Dict[int, Dict[str, List[Tuple[float, np.ndarray]]]]
+    _wrist_data: Dict[int, Dict[int, List[Tuple[float, np.ndarray]]]]
     _role_data: Dict[int, str]
     _handover_data: Dict[int, float]
 
-    def __init__(self, session_file: str, target_markers: Optional[List[str]] = None):
+    def __init__(self, session_file: str, target_markers: Optional[List[str]] = None,
+                 print_warnings: Optional[bool] = True, debug: Optional[bool] = False):
         """
         Initializes the object with the given session file and target markers.
         Does not read any data until .load() is called.
@@ -71,10 +72,14 @@ class H2HSessionData(Sequence):
             session_file: The path to the Matlab 7.3 file containing the session's data.
             target_markers: The list of markers to include. (If None, include all). The names should have the subject
                             tags included, like: 'Sub1_FH'.
+            print_warnings: If True, we will print warnings to the console.
+            debug: If True, we are in debug mode.
         """
         # Initialize public attributes.
         self.session_file = session_file
         self.target_markers = set(target_markers) if target_markers is not None else None
+        self.print_warnings = print_warnings
+        self.debug = debug
         # Initialize private attributes.
         self._trials = None
         self._mocap_data = None
@@ -119,6 +124,15 @@ class H2HSessionData(Sequence):
             'handover': handover_data
         }
 
+    def trials(self) -> List[int]:
+        """
+        Gets the trials in this session.
+
+        Returns:
+            A list of trial numbers.
+        """
+        return self._trials.copy()
+
     @staticmethod
     def _getitem_data_copy(data: Optional[Any], k: int) -> Optional[Any]:
         """
@@ -157,8 +171,7 @@ class H2HSessionData(Sequence):
         # Calculate the handover time using the wrist and role data.
         self._handover_data = self._get_handover()
 
-    @staticmethod
-    def _parse_trials(session_data: Dict[str, Any]) -> List[int]:
+    def _parse_trials(self, session_data: Dict[str, Any]) -> List[int]:
         """
         Parses the number of each trial from the data dict loaded from the session file.
 
@@ -179,9 +192,11 @@ class H2HSessionData(Sequence):
             if role is not None:
                 # Make sure to offset i by 1.
                 trials.append(i + 1)
+            elif self.print_warnings:
+                print(f'Warning: Trial {i + 1} empty.')
         return trials
 
-    def _parse_mocap(self, session_data: Dict[str, Any]) -> Dict[int, Dict[str, List[Tuple[float, Point]]]]:
+    def _parse_mocap(self, session_data: Dict[str, Any]) -> Dict[int, Dict[str, List[Tuple[float, np.ndarray]]]]:
         """
         Parses the mocap data from the data dict loaded from the session file.
 
@@ -208,10 +223,10 @@ class H2HSessionData(Sequence):
             for j in range(len(label_list)):
                 label = label_list[j]
                 if label in target_labels:
-                    mocap_data[label] = self._parse_mocap_frames(point_list[j])
+                    mocap_data[trial][label] = self._parse_mocap_frames(point_list[j])
         return mocap_data
 
-    def _parse_mocap_frames(self, mocap_frames: np.ndarray) -> List[Tuple[float, Point]]:
+    def _parse_mocap_frames(self, mocap_frames: np.ndarray) -> List[Tuple[float, np.ndarray]]:
         """
         Parses the numpy array of mocap frames for one marker.
 
@@ -223,11 +238,11 @@ class H2HSessionData(Sequence):
         """
         point_list = []
         for mocap_frame in mocap_frames:
-            point_list.append(Point(mocap_frame))
+            point_list.append(np.array(mocap_frame))
         timestamp_list = self._get_timestamps(mocap_frames.shape[0], self.mocap_fps)
-        return zip(timestamp_list, point_list)
+        return list(zip(timestamp_list, point_list))
 
-    def _parse_wrist(self, session_data: Dict[str, Any]) -> Dict[int, Dict[int, List[Tuple[float, Point]]]]:
+    def _parse_wrist(self, session_data: Dict[str, Any]) -> Dict[int, Dict[int, List[Tuple[float, np.ndarray]]]]:
         """
         Parses the wrist data from the data dict loaded from the session file.
 
@@ -335,7 +350,10 @@ class H2HSessionData(Sequence):
                 handover_data[trial] = follower_velocity[contact_pt][0]
             # When there's an issue finding handover, we remove the trial.
             except Exception as e:
-                print(f'Problem finding handover in trial {trial}: {e}')
+                if self.print_warnings:
+                    print(f'Warning: problem finding handover in trial {trial}: {type(e).__name__}: {e}')
+                    if self.debug:
+                        print(traceback.format_exc())
                 self._remove_trial(trial)
         return handover_data
 
@@ -355,7 +373,7 @@ class H2HSessionData(Sequence):
             A list of (timestamp, instantaneous velocity), not including the first point.
         """
         # Getting the points with the appropriate trial and marker.
-        points = self._wrist_data[trial][follower]
+        points = [frame[1] for frame in self._wrist_data[trial][follower]]
         # Filtering out points where we have nan values, as this messes with the butterworth filter.
         points = [point for point in points if not np.any(np.isnan(point))]
         # Getting the velocities from the points.
@@ -391,11 +409,16 @@ class H2HSessionData(Sequence):
             - self._role_data
             - self._handover_data
         """
-        self._trials.remove(trial)
-        self._mocap_data.pop(trial)
-        self._wrist_data.pop(trial)
-        self._role_data.pop(trial)
-        self._handover_data.pop(trial)
+        if self._trials is not None:
+            self._trials.remove(trial)
+        if self._mocap_data is not None:
+            self._mocap_data.pop(trial)
+        if self._wrist_data is not None:
+            self._wrist_data.pop(trial)
+        if self._role_data is not None:
+            self._role_data.pop(trial)
+        if self._handover_data is not None:
+            self._handover_data.pop(trial)
 
     def crop_nan(self) -> None:
         """
@@ -427,28 +450,32 @@ class H2HSessionData(Sequence):
                 self._crop_wrist_frames(trial, start_crop, end_crop)
 
     @staticmethod
-    def _get_nan_crop(mocap_frames: np.ndarray) -> Tuple[int, int]:
+    def _get_nan_crop(mocap_frames: List[Tuple[float, np.ndarray]]) -> Tuple[int, int]:
         """
         Gets the start and end indexes to crop out all the NaN values in the mocap_frames.
 
         Args:
-            - mocap_frames: A shape (n_frames, 3) numpy array of mocap points in each frame for this trial and marker.
+            - mocap_frames: The list of mocap frames for this trial and marker.
 
         Returns:
             A pair of indexes (start, end)
         """
+        # Convert to a numpy array of shape (n, 3) for points.
+        mocap_points = np.array([frame[1] for frame in mocap_frames])
         # Start crop is the first index where the values are not Nan.
         start_crop = 0
-        for i, frame in enumerate(mocap_frames):
-            if not np.any(np.isnan(frame)):
-                start_crop = i
+        for point in mocap_points:
+            isnan = np.isnan(point)
+            if not np.any(isnan):
                 break
+            start_crop += 1
         # End crop is the first index where the values are not Nan, in the reversed list of frames.
-        end_crop = mocap_frames.shape[0]
-        for i, frame in enumerate(np.flip(mocap_frames)):
-            if not np.any(np.isnan(frame)):
-                end_crop = i + 1  # +1 because end crop is not inclusive.
+        end_crop = mocap_points.shape[0]
+        for point in np.flip(mocap_points, axis=0):
+            isnan = np.isnan(point)
+            if not np.any(isnan):
                 break
+            end_crop -= 1
         return start_crop, end_crop
 
     def _crop_mocap_frames(self, trial: int, start_crop: int, end_crop: int) -> None:
@@ -479,7 +506,7 @@ class H2HSessionData(Sequence):
             - self._mocap_data
         """
         for subject in self._wrist_data[trial]:
-            self._mocap_data[trial][subject] = self._mocap_data[trial][subject][start_crop: end_crop]
+            self._wrist_data[trial][subject] = self._wrist_data[trial][subject][start_crop: end_crop]
 
     def crop_to_handover(self) -> None:
         """
@@ -502,17 +529,26 @@ class H2HSessionData(Sequence):
                 continue
             # Handover is within the timestamps, perform crop.
             else:
-                # Get the index of the timestamp.
-                end_crop = timestamps.index(handover_time)
+                # Get the index of the closest timestamp.
+                min_error = float('inf')
+                end_crop = 0
+                for i, timestamp in enumerate(timestamps):
+                    error = abs(timestamp - handover_time)
+                    if error < min_error:
+                        min_error = error
+                        end_crop = i
+                # Crop to handover.
                 self._crop_mocap_frames(trial, 0, end_crop)
                 self._crop_wrist_frames(trial, 0, end_crop)
 
 
 def test():
-    session_data = H2HSessionData('E:/Datasets/CS 4440 Final Project/mat_files_full/26_M4_F5_cropped_data_v2.mat')
+    session_data = H2HSessionData(session_file='E:/Datasets/CS 4440 Final Project/mat_files_full/test_data.mat',
+                                  debug=True)
     session_data.load()
+    # session_data.crop_to_handover()  # TODO: This is likely wrong, I do not like the method here.
     session_data.crop_nan()
-    session_data.crop_to_handover()
+    print()
 
 
 if __name__ == '__main__':

@@ -65,12 +65,16 @@ class H2HSubjectsDataset(Dataset):
         subject_joint_groups = joint_groups.copy()
         if self.object_group in joint_groups:
             subject_joint_groups.remove(self.object_group)
-        # Get the list of target markers for each subject and the object.
+        # Get the list of target markers for each subject.
         self._sub_1_target_markers = joint_groups_to_marker_labels(joint_groups_file, subject_joint_groups,
                                                                    self.sub_1_tag)
         self._sub_2_target_markers = joint_groups_to_marker_labels(joint_groups_file, subject_joint_groups,
                                                                    self.sub_2_tag)
-        self._object_target_markers = joint_groups_to_marker_labels(joint_groups_file, [self.object_group])
+        # Determine if the object is part of the loaded joint_groups, and get the object target markers if so.
+        if self.object_group in load_joint_group_names(joint_groups_file):
+            self._object_target_markers = joint_groups_to_marker_labels(joint_groups_file, [self.object_group])
+        else:
+            self._object_target_markers = []
         # Get a list of input sequences for each trial, "flattening" all the sessions.
         sequences, labels = self._load_sequences()
         # Split the trail-length sequences with a sliding window according to our max sequence length,
@@ -94,7 +98,7 @@ class H2HSubjectsDataset(Dataset):
         for session_file in self.session_files:
             # Iterating though each trial in the session.
             session_data = self._load_session_data(session_file)
-            for trial in range(len(session_data)):
+            for trial in session_data.trials():
                 mocap_data = session_data[trial]['mocap']
                 # Append subject 1's mocap data.
                 sequences.append(self._parse_markers(mocap_data, self._sub_1_target_markers))
@@ -143,7 +147,7 @@ class H2HSubjectsDataset(Dataset):
         M = len(target_markers)
         output = torch.zeros((L, M, 3))
         # Parse the output from the mocap data according to the target markers.
-        for frame in L:
+        for frame in range(L):
             for m, marker in enumerate(target_markers):
                 # Set each cell of the output to the mocap data point, stripping the timestamp.
                 output[frame][m] = torch.tensor(mocap_data[marker][frame][1], dtype=torch.float64)
@@ -170,10 +174,14 @@ class H2HSubjectsDataset(Dataset):
         for i in sequences.shape[0]:
             sequence = sequences[i, :, :, :]
             label = sequence_labels[i, :]
-            # Apply a sliding window to the sequence.
-            for j in range(0, sequence.shape[0] - self.sequence_length, 1):
-                samples.append(sequence[j: j + self.sequence_length, :, :])
-                labels.append(label)
+            # Can't apply sliding window if sequence is too small.
+            if self.sequence_length <= sequence.shape[0]:
+                samples.append(sequence)
+            else:
+                # Apply a sliding window to the sequence.
+                for j in range(0, sequence.shape[0] - self.sequence_length, 1):
+                    samples.append(sequence[j: j + self.sequence_length, :, :])
+                    labels.append(label)
         # Reshape the outputs into tensors.
         return torch.tensor(samples, dtype=torch.float64), torch.tensor(labels, dtype=torch.float64)
 
