@@ -36,10 +36,10 @@ class H2HSessionData(Sequence):
     Attributes:
         mocap_fps: (class attribute) The framerate the mocap data was captured at.
         wrist_marker_name: (class attribute) The name of the wrist marker, this is always loaded to compute handover.
-        sub_1_tag: (class attribute) The preceding "tag" for subject 1's markers.
-        sub_2_tag: (class attribute) The preceding "tag" for subject 2's markers.
+        sub_1_tag: (class attribute) The preceding "tag" for subject 1's markers (used for handover).
+        sub_2_tag: (class attribute) The preceding "tag" for subject 2's markers (used for handover).
         session_file: The path to the Matlab 7.3 file containing the session's data.
-        target_markers: The list of markers to include (same for each subject). (If None, include all).
+        target_markers: The list of markers to include. (If None, include all).
         _trials: A list of trials in this session (1, 2, 3, etc.).
         _mocap_data: A dictionary of the mocap data for the current session.
             Structured: {trial: {marker: [(timestamp, point)]}}.
